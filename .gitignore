@@ -5,6 +5,7 @@ __pycache__/
 /run_merge
 /build/
 /dist/
+/.venv/
 
 # Local sequencing inputs, references and analysis products
 /data/

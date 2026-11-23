@@ -1,10 +1,25 @@
 # FLTIQ
 
-FLTIQ（Full-Length Transcript Identification and Quantification）从长读长 RNA 测序数据鉴定转录本，生成合并参考注释，并可用配对短读长 RNA-seq 定量。主入口为 `run_FLTIQ.sh`，已有 SQANTI3 结果时可单独运行 `run_merge.sh`。输入和输出均可放在项目目录以外。
+FLTIQ（Full-Length Transcript Identification and Quantification）从长读长 RNA 测序数据鉴定转录本，生成合并参考注释，并可用配对短读长 RNA-seq 定量。安装后用 `fltiq` 运行主流程，已有 SQANTI3 结果时可用 `fltiq-merge` 单独合并注释。输入和输出均可放在项目目录以外。
+
+## 本地安装
+
+在项目根目录使用 Python 3.9 或更高版本运行以下命令。激活环境后，可从任意工作目录调用两个命令。
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+fltiq --version
+fltiq --help
+fltiq-merge --help
+```
+
+开发时可使用 `python -m pip install -e .`。将流程软件安装到另一台机器时，可用 `python -m pip wheel --no-deps -w dist .` 构建 wheel，复制 `.whl` 文件后在目标环境中用 `python -m pip install /path/to/fltiq-0.1.0-py3-none-any.whl` 安装。源码目录中的 `./run_FLTIQ.sh` 和 `./run_merge.sh` 也可继续使用。
 
 ## 软件环境
 
-驱动脚本使用 Python 3.9 或更新版本的标准库。外部工具按分析步骤配置。
+pip 安装 FLTIQ 命令和 Python 模块。驱动程序只依赖 Python 标准库，运行分析时需另行配置所选步骤对应的外部工具。
 
 | 步骤 | 验证时使用的软件 |
 | --- | --- |
@@ -14,14 +29,14 @@ FLTIQ（Full-Length Transcript Identification and Quantification）从长读长 
 | 短读长比对和计数 | HISAT2 2.2.1、samtools、Subread 2.0.6 的 featureCounts |
 | 转录本丰度估计 | gffread、Kallisto 0.50.1 |
 
-原始 FASTQ 复现模式另需 Pychopper 2.7.10（含 HMMER）、Chopper 0.8.0 和 Trimmomatic 0.39（含 Java），注释合并使用 AGAT 1.1.0。运行时将所选步骤的工具加入 `PATH`，`PYTHON` 可指定驱动脚本的解释器。`-s` 指向包含 `sqanti3_qc.py` 的目录，`--sqanti_python` 指向 SQANTI3 环境的 Python。输入、参考资源、样本表和运行结果均可保存在仓库外。
+原始 FASTQ 复现模式另需 Pychopper 2.7.10（含 HMMER）、Chopper 0.8.0 和 Trimmomatic 0.39（含 Java），注释合并使用 AGAT 1.1.0。运行时将所选步骤的工具加入 `PATH`，源码目录的 shell 入口支持用 `PYTHON` 指定解释器。`-s` 指向包含 `sqanti3_qc.py` 的目录，`--sqanti_python` 指向 SQANTI3 环境的 Python。输入、参考资源、样本表和运行结果均可保存在仓库外。
 
 ## 从原始 FASTQ 复现历史分析
 
 `--historical-raw` 接受已完成 basecalling 和拆分文库的 Nanopore cDNA FASTQ。以下命令同时生成合并注释、featureCounts 矩阵和 Kallisto 丰度。环境变量由运行者设为本机的实际路径。
 
 ```bash
-./run_FLTIQ.sh --historical-raw \
+fltiq --historical-raw \
   -f "$LONG_FASTQ" -r "$GENOME_FASTA" -a "$REFERENCE_GTF" \
   -s "$SQANTI_DIR" --sqanti_python "$SQANTI_PYTHON" \
   --cage-peaks "$CAGE_BED" --polya-motifs "$POLYA_MOTIFS" \
@@ -58,7 +73,7 @@ awk 'NR % 4 == 1 {print substr($1, 2)}' "$ARCHIVED_POOLED_FASTQ" > "$ORDER_TSV"
 参考基因组 FASTA 和参考 GTF 应来自同一组装，染色体命名须一致。`-f` 可接收一个或多个长读长 FASTA/FASTQ，多个文件将共同生成一套转录本。直接 RNA 测序使用默认值 `--is_native_rna=True`，cDNA 数据使用 `False`。以下示例中的输入和输出路径需换成实际位置。
 
 ```bash
-./run_FLTIQ.sh \
+fltiq \
   -r /refs/genome.fa -a /refs/annotation.gtf \
   -f /reads/long_1.fastq.gz /reads/long_2.fastq.gz \
   -s "$SQANTI_DIR" --sqanti_python "$SQANTI_PYTHON" \
@@ -104,7 +119,7 @@ featureCounts 以外显子为计数特征。历史分析用 Subread 2.0.6 按 `g
 ## 单独合并已有 SQANTI3 结果
 
 ```bash
-./run_merge.sh \
+fltiq-merge \
   -i /results/analysis/sqanti/analysis_classification.txt \
   -g /results/analysis/sqanti/analysis_corrected.gtf \
   -a /refs/annotation.gtf -d /results/analysis_merge

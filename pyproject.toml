@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "FLTIQ"
+dynamic = ["version"]
+description = "Full-length transcript identification and quantification from RNA sequencing reads"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+
+[project.scripts]
+fltiq = "FLTIQ.cli:main"
+fltiq-merge = "FLTIQ.merge_cli:main"
+
+[tool.hatch.version]
+path = "FLTIQ/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+include = ["/FLTIQ/*.py"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/FLTIQ/*.py",
+  "/run_FLTIQ.py",
+  "/run_FLTIQ.sh",
+  "/run_merge.py",
+  "/run_merge.sh",
+  "/requirements.txt",
+]
