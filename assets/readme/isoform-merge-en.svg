@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="256" viewBox="0 0 840 256" role="img" aria-labelledby="title desc" lang="en">
+  <title id="title">Merging reference and long-read transcript models</title>
+  <desc id="desc">A three-exon reference transcript and a full splice match share the same splice junctions. The merged GTF contains one copy of the reference structure and a second isoform that skips the middle exon.</desc>
+  <defs>
+    <g id="included" fill="currentColor">
+      <path d="M0 0h154" stroke="currentColor" stroke-width="2.5"/>
+      <rect x="0" y="-9" width="36" height="18" rx="2"/>
+      <rect x="61" y="-9" width="34" height="18" rx="2"/>
+      <rect x="118" y="-9" width="36" height="18" rx="2"/>
+    </g>
+    <g id="skipped" fill="currentColor">
+      <path d="M0 0h154" stroke="currentColor" stroke-width="2.5"/>
+      <rect x="0" y="-9" width="36" height="18" rx="2"/>
+      <rect x="118" y="-9" width="36" height="18" rx="2"/>
+    </g>
+  </defs>
+  <rect width="840" height="256" rx="10" fill="#f6f8f5"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" fill="#18342e">
+    <g font-size="32" font-weight="650">
+      <text x="31" y="51">Input transcripts</text>
+      <text x="522" y="51">Merged GTF</text>
+    </g>
+    <path d="M32 68h357 M522 68h285" fill="none" stroke="#cbd8d0" stroke-width="2"/>
+    <g font-size="26">
+      <text x="31" y="112">Reference</text>
+      <text x="31" y="164">Full match</text>
+      <text x="31" y="216">Exon skipping</text>
+    </g>
+  </g>
+  <g color="#086d60">
+    <use href="#included" x="211" y="102"/>
+    <use href="#included" x="211" y="154"/>
+    <use href="#included" x="557" y="102"/>
+  </g>
+  <g color="#985018">
+    <use href="#skipped" x="211" y="206"/>
+    <use href="#skipped" x="557" y="206"/>
+  </g>
+  <g fill="none" stroke="#086d60" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M380 102h154 M380 154h41q6 0 10-5l33-42q4-5 11-5 M522 94l12 8-12 8"/>
+  </g>
+  <path d="M380 206h154m-12-8 12 8-12 8" fill="none" stroke="#985018" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

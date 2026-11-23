@@ -24,6 +24,9 @@ include = ["/FLTIQ/*.py"]
 [tool.hatch.build.targets.sdist]
 include = [
   "/FLTIQ/*.py",
+  "/README.zh-CN.md",
+  "/assets/readme/isoform-merge.svg",
+  "/assets/readme/isoform-merge-en.svg",
   "/run_FLTIQ.py",
   "/run_FLTIQ.sh",
   "/run_merge.py",
