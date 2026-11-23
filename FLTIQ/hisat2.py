@@ -13,6 +13,8 @@
 """Map paired-end RNA-seq reads and count exons grouped by gene or transcript."""
 
 from pathlib import Path
+import re
+import subprocess
 
 from FLTIQ.utils import run_tool
 
@@ -40,11 +42,21 @@ class Hisat2:
         return bam
 
 
-def count_expression(annotation, bams, output_dir, n_cpu):
-    """Reproduce the historical gene read counts and transcript fragment counts on Subread >=2.0.2."""
+def verify_featurecounts(executable, expected_version):
+    result = subprocess.run([executable, '-v'], check=True, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if re.search(r'featureCounts v' + re.escape(expected_version) + r'(?:\s|$)', result.stdout) is None:
+        raise ValueError(f'Expected featureCounts {expected_version} at {executable}, got {result.stdout.strip()}')
+
+
+def count_expression(annotation, bams, output_dir, n_cpu, *, gene_tool='featureCounts',
+                     transcript_tool='featureCounts', transcript_annotation=None, historical=False):
     output_dir.mkdir(parents=True, exist_ok=True)
-    for attribute, filename in [('gene_id', 'geneCounts.tsv'), ('transcript_id', 'transcriptCounts.tsv')]:
+    targets = [(gene_tool, 'gene_id', annotation, 'geneCounts.tsv'),
+               (transcript_tool, 'transcript_id', transcript_annotation or annotation, 'transcriptCounts.tsv')]
+    for executable, attribute, gtf, filename in targets:
         output = output_dir / filename
-        pair_flags = ['--countReadPairs'] if attribute == 'transcript_id' else []
-        run_tool(['featureCounts', '-T', n_cpu, '-p', *pair_flags, '-t', 'exon',
-                  '-g', attribute, '-a', annotation, '-o', output, *bams], output=output)
+        # Subread 2.0.1 counts pairs with -p alone. Newer versions require --countReadPairs.
+        pair_flags = ['--countReadPairs'] if attribute == 'transcript_id' and not historical else []
+        run_tool([executable, '-T', n_cpu, '-p', *pair_flags, '-t', 'exon',
+                  '-g', attribute, '-a', gtf, '-o', output, *bams], output=output)

@@ -24,9 +24,11 @@ def main():
     parser.add_argument('-g', '--sqanti_gtf', required=True)
     parser.add_argument('-a', '--known_annotation', required=True)
     parser.add_argument('-d', '--output_dir', required=True)
+    parser.add_argument('--historical', action='store_true', help='Apply the historical post-merge GTF cleanup')
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    print(merge_annotations(args.sqanti_classification, args.sqanti_gtf, args.known_annotation, args.output_dir))
+    print(merge_annotations(args.sqanti_classification, args.sqanti_gtf, args.known_annotation,
+                            args.output_dir, historical=args.historical))
 
 
 if __name__ == '__main__':

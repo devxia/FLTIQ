@@ -44,7 +44,8 @@ def write_row(handle, fields, updates):
 
 
 class Cleaner:
-    def __init__(self, sqanti_classification, sqanti_gtf, known_annotation, output_dir='result_SQANTI'):
+    def __init__(self, sqanti_classification, sqanti_gtf, known_annotation, output_dir='result_SQANTI', *, historical=False):
+        self.historical = historical
         self.sqanti_gtf = Path(sqanti_gtf)
         self.known_annotation = Path(known_annotation).resolve()
         self.output_dir = Path(output_dir).resolve()
@@ -82,6 +83,9 @@ class Cleaner:
                     continue
                 if tid not in self.novel_genes:
                     raise ValueError(f'Transcript {tid} is absent from the SQANTI classification')
+                if self.historical:
+                    handle.write('\t'.join(fields) + '\n')
+                    continue
                 updates = {}
                 if 'ENS' in tid or tid in self.reference_transcripts:
                     updates['transcript_id'] = f'novel_{tid}'
@@ -108,7 +112,21 @@ class Cleaner:
     def clean(self):
         with self.final_gtf.open('w') as handle:
             for fields, attrs in gtf_rows(self.merged_gtf):
-                if 'IDmodified-transcript' in attrs.get('transcript_id', ''):
+                marker_source = fields[8] if self.historical else attrs.get('transcript_id', '')
+                if 'IDmodified-transcript' in marker_source:
+                    continue
+                if self.historical:
+                    tid = attrs.get('transcript_id')
+                    if not tid or ('|' in tid and tid in self.fsm):
+                        continue
+                    gid = attrs['gene_id']
+                    name = attrs.get('gene_name')
+                    if not name and ':' in tid and ':' in gid:
+                        gid = self.novel_genes.get(tid, gid)
+                    if not name or (gid.startswith('ENS') and '_' not in gid):
+                        name = self.gene_names.get(gid) or name or gid
+                    fields[8] = f'transcript_id "{tid}"; gene_id "{gid}"; gene_name "{name}";'
+                    handle.write('\t'.join(fields) + '\n')
                     continue
                 gid = attrs['gene_id']
                 name = self.gene_names.get(gid) or attrs.get('gene_name') or gid
@@ -117,11 +135,11 @@ class Cleaner:
             raise ValueError(f'Empty merged annotation at {self.final_gtf}')
 
 
-def merge_annotations(classification, corrected_gtf, annotation, output_dir):
+def merge_annotations(classification, corrected_gtf, annotation, output_dir, *, historical=False):
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.merge-', dir=output_dir) as work:
-        cleaner = Cleaner(classification, corrected_gtf, annotation, work)
+        cleaner = Cleaner(classification, corrected_gtf, annotation, work, historical=historical)
         cleaner.del_FSM()
         cleaner.merge()
         cleaner.convert()

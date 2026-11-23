@@ -33,14 +33,22 @@ class SQANTI:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.name = proj_name
         self.classification = self.output_dir / f'{proj_name}_classification.txt'
+        self.corrected_fasta = self.output_dir / f'{proj_name}_corrected.fasta'
         self.corrected_gtf = self.output_dir / f'{proj_name}_corrected.gtf'
 
-    def qc(self):
+    def qc(self, *, cage_peaks=None, polya_motifs=None, force_id_ignore=True, report='html'):
+        options = ['--report', report]
+        if force_id_ignore:
+            options.append('--force_id_ignore')
+        if cage_peaks:
+            options.extend(['--CAGE_peak', cage_peaks])
+        if polya_motifs:
+            options.extend(['--polyA_motif_list', polya_motifs])
         env = os.environ.copy()
         env['PATH'] = str(Path(self.python).absolute().parent) + os.pathsep + env['PATH']
         result = run_tool([self.python, self.script, self.isoforms, self.annotation, self.reference,
                            '-t', self.n_cpu, '-d', self.output_dir, '-o', self.name,
-                           '--force_id_ignore'], output=self.classification, env=env)
+                           *options], output=self.classification, env=env)
         if not self.corrected_gtf.is_file() or not self.corrected_gtf.stat().st_size:
             raise RuntimeError(f'SQANTI3 produced no corrected annotation at {self.corrected_gtf}')
         return result

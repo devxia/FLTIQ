@@ -14,17 +14,46 @@ FLTIQ（Full-Length Transcript Identification and Quantification）从长读长 
 | 短读长比对和计数 | HISAT2 2.2.1、samtools、Subread 2.0.6 的 featureCounts |
 | 转录本丰度估计 | gffread、Kallisto 0.50.1 |
 
-将所选步骤的可执行文件加入 `PATH`。`-s` 指向包含 `sqanti3_qc.py` 的安装目录，`--sqanti_python` 指定其环境的 Python。下面是在大亨上验证过的设置，可按部署位置调整。
+原始 FASTQ 复现模式另需 Pychopper 2.7.10（含 HMMER）、Chopper 0.8.0 和 Trimmomatic 0.39（含 Java），注释合并使用 AGAT 1.1.0。运行时将所选步骤的工具加入 `PATH`，`PYTHON` 可指定驱动脚本的解释器。`-s` 指向包含 `sqanti3_qc.py` 的目录，`--sqanti_python` 指向 SQANTI3 环境的 Python。输入、参考资源、样本表和运行结果均可保存在仓库外。
+
+## 从原始 FASTQ 复现历史分析
+
+`--historical-raw` 接受已完成 basecalling 和拆分文库的 Nanopore cDNA FASTQ。以下命令同时生成合并注释、featureCounts 矩阵和 Kallisto 丰度。环境变量由运行者设为本机的实际路径。
 
 ```bash
-envs=/software_users/xiabinbin/miniconda3/envs
-export PATH="/software_users/xiabinbin/kallisto:$envs/flair_env/bin:$envs/sequence/bin:$PATH"
-export PYTHON="$envs/sequence/bin/python"
-sqanti_dir=/software_users/xiabinbin/SQANTI3-5.2.2
-sqanti_python="$envs/SQANTI3/bin/python"
+./run_FLTIQ.sh --historical-raw \
+  -f "$LONG_FASTQ" -r "$GENOME_FASTA" -a "$REFERENCE_GTF" \
+  -s "$SQANTI_DIR" --sqanti_python "$SQANTI_PYTHON" \
+  --cage-peaks "$CAGE_BED" --polya-motifs "$POLYA_MOTIFS" \
+  --samples "$LANES_TSV" --adapters "$ADAPTER_FASTA" \
+  --quant_method both -i "$HISAT2_INDEX_PREFIX" \
+  --gene-featurecounts "$FEATURECOUNTS_206" \
+  --transcript-featurecounts "$FEATURECOUNTS_201" \
+  --transcript-count-gtf "$TRANSCRIPT_COUNT_GTF" \
+  --reference-transcripts "$REFERENCE_TRANSCRIPTS_FASTA" \
+  -o "$OUTPUT_DIR" -n analysis -p 20 --pychopper-threads 40
 ```
 
-## 从长读长生成合并注释
+| 步骤 | 复现模式的输入与行为 |
+| --- | --- |
+| 全长 cDNA 预处理 | `-f` 后按预期合并顺序列出各文库的 FASTQ。一个文库分成多个 FASTQ 时可改用 `--raw-library chunk1.fq.gz chunk2.fq.gz`，每个文库分别指定一次。每个文库独立运行 Pychopper（PCS109），输出报告、统计、未分类和 rescued reads。将主输出经 Chopper（平均质量至少 7、长度至少 500 nt）过滤，按文库顺序合成一个 FASTQ。 |
+| FLAIR 和 SQANTI3 | FLAIR `align` 使用 `--nvrna`，`correct` 使用参考 GTF，`collapse` 使用校正后的 BED。SQANTI3 使用外部 CAGE BED 和 poly(A) motif 表，保留默认的 ID 检查和 HTML 报告。极小的验证集缺少某些分类时，SQANTI3 5.2.2 的 R 报告可能失败，可显式选择 `--sqanti-report skip` 来验证分类和定量。 |
+| 注释合并 | 先从校正 GTF 去掉所有 `full-splice_match`，保留其余记录原有的 ID，与参考注释经 AGAT 和 gffread 合并。最后过滤 `IDmodified-transcript` 和残留的带竖线 FSM，按参考基因名及 SQANTI3 的 `associated_gene` 补全属性，输出 `transcript_id`、`gene_id`、`gene_name`。独立合并入口支持 `--historical`。 |
+| 双端短读长 | 样本表含制表符分隔的 `sample`、`r1`、`r2` 三列，每行一批。相同 `sample` 的行按表内顺序处理，初测在前、补测在后。每批分别用 Trimmomatic PE、TruSeq3-PE 接头、`ILLUMINACLIP:<接头文件>:2:30:10:2:true SLIDINGWINDOW:10:20 MINLEN:150` 清洗，按样本分别拼接所有批次的成对 R1、R2。 |
+| 基因与转录本计数 | HISAT2 比对合并批次并按坐标排序。基因矩阵用本次的最终 GTF 和 Subread 2.0.6 的 `-p -t exon -g gene_id`。转录本矩阵用外部指定的独立 GTF 和 Subread 2.0.1 的 `-p -t exon -g transcript_id`。这两个版本的 `-p` 分别对应 read 和片段计数。要重建补测前的矩阵，可用仅含首批记录的样本表单独运行。 |
+| Kallisto | 按 SQANTI3 分类保留校正 FASTA 中的非 FSM 转录本，再接上原版参考转录本 FASTA。以此建索引，每个样本使用首批清洗后的配对 reads，默认 100 次 bootstrap。 |
+
+Pychopper 默认按文库自动抽样调参。复跑已有分析时，`--pychopper-cutoffs` 可按文库顺序接收各自 `statistics.tsv` 中记录的 `Cutoff(q)`，避免重新抽样改变入选 reads。要对照历史数值，还需使用原版基因组、参考 GTF、CAGE BED、motif 表、接头、HISAT2 索引，以及所选定量分支使用的转录本 GTF 或参考转录本 FASTA。独立转录本 GTF 属于历史定量的外部输入。
+
+并行预处理可能改变同一文库内的 read 顺序。若需要复现历史 FASTQ 的排列，可以在仓库外从当时合并的四行式 FASTQ 导出 ID，再传入 `--long-read-order "$ORDER_TSV"`。流程会检查每个过滤后的 read ID 恰好出现一次，并在运行 FLAIR 前按给定顺序重排。顺序表只保存 ID，序列和质量值仍从本次的原始 FASTQ 重新生成。
+
+```bash
+awk 'NR % 4 == 1 {print substr($1, 2)}' "$ARCHIVED_POOLED_FASTQ" > "$ORDER_TSV"
+```
+
+只运行长读长鉴定和合并时，保留长读长、参考基因组、参考 GTF、SQANTI3、CAGE 和 motif 的参数，省略短读长及定量参数。短读长单独选择 `--quant_method featurecounts` 或 `kallisto` 时，仅需对应分支的参考文件和工具。
+
+## 从已质控的长读长生成合并注释
 
 参考基因组 FASTA 和参考 GTF 应来自同一组装，染色体命名须一致。`-f` 可接收一个或多个长读长 FASTA/FASTQ，多个文件将共同生成一套转录本。直接 RNA 测序使用默认值 `--is_native_rna=True`，cDNA 数据使用 `False`。以下示例中的输入和输出路径需换成实际位置。
 
@@ -32,20 +61,20 @@ sqanti_python="$envs/SQANTI3/bin/python"
 ./run_FLTIQ.sh \
   -r /refs/genome.fa -a /refs/annotation.gtf \
   -f /reads/long_1.fastq.gz /reads/long_2.fastq.gz \
-  -s "$sqanti_dir" --sqanti_python "$sqanti_python" \
-  --is_native_rna=False -p 12 -o /results -n heart
+  -s "$SQANTI_DIR" --sqanti_python "$SQANTI_PYTHON" \
+  --is_native_rna=False -p 12 -o /results -n analysis
 ```
 
-该命令依次运行 FLAIR `align`、`correct`、`collapse` 和 SQANTI3 `qc`。合并步骤保留参考注释中的已知转录本，从 SQANTI3 校正结果中取出分类不等于 `full-splice_match` 的转录本，再用 AGAT 和 gffread 合并。若全部为完整剪接匹配，则以参考注释生成最终 GTF。每次运行使用新的 `<输出目录>/<项目名>`。
+此模式接受已质控的长读长。该命令依次运行 FLAIR `align`、`correct`、`collapse` 和 SQANTI3 `qc`。合并步骤保留参考注释中的已知转录本，从 SQANTI3 校正结果中取出分类不等于 `full-splice_match` 的转录本，再用 AGAT 和 gffread 合并。若全部为完整剪接匹配，则以参考注释生成最终 GTF。每次运行使用新的 `<输出目录>/<项目名>`。
 
-## 加入短读长定量
+## 为已质控的 reads 加入短读长定量
 
 在同一条主流程命令中追加下列参数。单个样本使用 `-1 /reads/R1.fastq.gz -2 /reads/R2.fastq.gz`。多样本使用 `--samples /path/to/samples.tsv`，每个样本一行并以制表符分隔。相对路径从样本表所在目录解析。
 
 ```tsv
 sample	r1	r2
-sham_1	reads/sham_1_R1.fastq.gz	reads/sham_1_R2.fastq.gz
-mi_1	reads/mi_1_R1.fastq.gz	reads/mi_1_R2.fastq.gz
+sample_A	reads/sample_A_R1.fastq.gz	reads/sample_A_R2.fastq.gz
+sample_B	reads/sample_B_R1.fastq.gz	reads/sample_B_R2.fastq.gz
 ```
 
 | 追加参数（以样本表为例） | 生成的结果 |
@@ -56,7 +85,7 @@ mi_1	reads/mi_1_R1.fastq.gz	reads/mi_1_R2.fastq.gz
 
 `-i` 填 HISAT2 索引前缀。需要新建索引时，运行 `hisat2-build /refs/genome.fa /refs/hisat2/genome`。Kallisto 默认运行 100 次 bootstrap，可用 `--bootstraps` 调整。
 
-featureCounts 以外显子为计数特征。历史分析用 Subread 2.0.6 按 `gene_id` 计单条 read，用 2.0.1 按 `transcript_id` 计片段。本流程在 2.0.6 中对转录本显式指定 `--countReadPairs` 以保留这两个计数单位，并对两张表统一使用本次生成的最终 GTF。多个转录本共享外显子时，无法唯一归属的片段会出现在转录本计数的 `.summary` 中。
+featureCounts 以外显子为计数特征。历史分析用 Subread 2.0.6 按 `gene_id` 计单条 read，用 2.0.1 按 `transcript_id` 计片段。已质控模式在 2.0.6 中对转录本显式指定 `--countReadPairs` 以保留这两个计数单位，并对两张表统一使用本次生成的最终 GTF。多个转录本共享外显子时，无法唯一归属的片段会出现在转录本计数的 `.summary` 中。
 
 ## 主要输出
 
@@ -64,9 +93,10 @@ featureCounts 以外显子为计数特征。历史分析用 Subread 2.0.6 按 `g
 
 | 路径 | 内容 |
 | --- | --- |
+| `long_qc/pooled.fq`、`short_qc/<样本名>/` | 原始 FASTQ 模式下的全长过滤结果和分批短读长清洗结果 |
 | `flair/<项目名>.isoforms.gtf` | 长读长支持的转录本结构 |
 | `sqanti/<项目名>_classification.txt`、`sqanti/<项目名>_corrected.gtf` | 转录本分类及校正注释 |
-| `merge/<项目名>_corrected.final.gtf` | 已知和新转录本的合并注释，也是两个短读长定量分支的注释来源 |
+| `merge/<项目名>_corrected.final.gtf` | 已知和新转录本的合并注释，用于基因计数；原始 FASTQ 复现模式按各分支使用历史指定的参考资源 |
 | `hisat2/<样本名>.bam` | 按坐标排序的短读长比对 |
 | `counts/geneCounts.tsv`、`counts/transcriptCounts.tsv` | 多样本原始计数矩阵，另附分配情况 `.summary` |
 | `kallisto/samples/<样本名>/abundance.tsv` | 每个转录本的估计片段数及 TPM |
@@ -75,12 +105,12 @@ featureCounts 以外显子为计数特征。历史分析用 Subread 2.0.6 按 `g
 
 ```bash
 ./run_merge.sh \
-  -i /results/heart/sqanti/heart_classification.txt \
-  -g /results/heart/sqanti/heart_corrected.gtf \
-  -a /refs/annotation.gtf -d /results/heart_merge
+  -i /results/analysis/sqanti/analysis_classification.txt \
+  -g /results/analysis/sqanti/analysis_corrected.gtf \
+  -a /refs/annotation.gtf -d /results/analysis_merge
 ```
 
-合并入口与主流程调用同一份源码。此示例的最终文件为 `/results/heart_merge/heart_corrected.final.gtf`。
+合并入口与主流程调用同一份源码。此示例的最终文件为 `/results/analysis_merge/analysis_corrected.final.gtf`。
 
 ### Cite FLTIQ <a name="cite"></a>
 

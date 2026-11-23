@@ -5,3 +5,21 @@ __pycache__/
 /run_merge
 /build/
 /dist/
+
+# Local sequencing inputs, references and analysis products
+/data/
+/results/
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.fa
+*.fa.gz
+*.fasta
+*.fasta.gz
+*.gtf
+*.gtf.gz
+*.bam
+*.sam
+*.bai
+/samples.tsv

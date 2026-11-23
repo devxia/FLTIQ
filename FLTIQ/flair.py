@@ -35,10 +35,10 @@ class FLAIR:
         return run_tool(['flair', 'align', '-g', self.reference, '-r', *self.fl_reads,
                          '-t', self.n_cpu, '-o', self.prefix, *self.native_args], output=self.bed)
 
-    def correct(self):
+    def correct(self, *, historical=False):
         return run_tool(['flair', 'correct', '-g', self.reference, '-q', self.bed,
                          '-f', self.annotation, '-t', self.n_cpu, '-o', self.prefix,
-                         *self.native_args], output=self.corrected_bed)
+                         *([] if historical else self.native_args)], output=self.corrected_bed)
 
     def collapse(self):
         return run_tool(['flair', 'collapse', '-g', self.reference, '-q', self.corrected_bed,

@@ -42,12 +42,12 @@ def timing(msg: str):
     logging.info('Finished %s in %.3f seconds', msg, toc - tic)
 
 
-def run_tool(command, *, output=None, env=None, cwd=None):
+def run_tool(command, *, output=None, env=None, cwd=None, stdout=subprocess.PIPE):
     """Run one pipeline tool and check its promised output, including silent failures."""
     args = list(map(str, command))
     logging.info('Running %s', shlex.join(args))
     with timing(args[0]):
-        result = subprocess.run(args, check=True, stdout=subprocess.PIPE, env=env, cwd=cwd)
+        result = subprocess.run(args, check=True, stdout=stdout, env=env, cwd=cwd)
     if output is not None and not (Path(output).is_file() and Path(output).stat().st_size):
         raise RuntimeError(f'{args[0]} produced no output at {output}')
     return [{'output': result.stdout, 'stderr': result.stderr}]
