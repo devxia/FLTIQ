@@ -33,17 +33,18 @@ flags.DEFINE_string('r2', "./", 'Path to NGS R2.')
 
 FLAGS = flags.FLAGS
 
-FLAIR_wrapper = FLAIR(FLAGS.reference, FLAGS.annotation, FLAGS.fl_reads, FLAGS.n_cpu, FLAGS.is_native_rna,
-                      FLAGS.output_dir)
-SQANTI_wrapper = SQANTI(FLAGS.sqanti_dir, f"{FLAGS.proj_name}.isoforms.gtf", FLAGS.annotation, FLAGS.reference,
-                        FLAGS.n_cpu, FLAGS.output_dir)
-Hisat2_wrapper = Hisat2(FLAGS.hisat2_idx, FLAGS.n_cpu, FLAGS.output_dir)
-
 
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
     logging.set_verbosity(logging.INFO)
+
+    FLAIR_wrapper = FLAIR(FLAGS.reference, FLAGS.annotation, FLAGS.fl_reads, FLAGS.n_cpu, FLAGS.is_native_rna,
+                          FLAGS.output_dir)
+    SQANTI_wrapper = SQANTI(FLAGS.sqanti_dir, f"{FLAGS.proj_name}.isoforms.gtf", FLAGS.annotation, FLAGS.reference,
+                            FLAGS.n_cpu, FLAGS.output_dir)
+    Hisat2_wrapper = Hisat2(FLAGS.hisat2_idx, FLAGS.n_cpu, FLAGS.output_dir)
+
     FLAIR_wrapper.align()
     FLAIR_wrapper.correct()
     FLAIR_wrapper.collapse()

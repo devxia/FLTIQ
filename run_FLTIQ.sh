@@ -67,6 +67,7 @@ if [ ! -f "$fltiq_script" ]; then
     exit 1
 fi
 
+# Run script with required parameters
 python $fltiq_script \
 --proj_name=$proj_name \
 --sqanti_dir=$sqanti_dir \

@@ -1,0 +1,4 @@
+absl-py~=2.1.0
+pandas~=2.2.2
+gtfparse~=2.5.0
+tqdm~=4.66.4
