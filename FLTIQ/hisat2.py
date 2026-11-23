@@ -10,78 +10,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Library to run hisat2 from Python."""
+"""Map paired-end RNA-seq reads and count exons grouped by gene or transcript."""
 
-import glob
-import os
-import subprocess
-from typing import Any, List, Mapping, Optional, Sequence
+from pathlib import Path
 
-from absl import logging
-
-from FLTIQ import utils
+from FLTIQ.utils import run_tool
 
 
 class Hisat2:
-    """Python wrapper of the Hisat2 binary."""
-
-    def __init__(self,
-                 *,
-                 hisat2_idx: str,
-                 n_cpu: int = 4,
-                 output_dir: str = "result_hisat2"):
-        """Initializes the Python hisat2 wrapper.
-
-    Args:
-        hisat2_idx: The path to the hisat2 index.
-        n_cpu: The number of CPUs to give hisat2.
-
-    Raises:
-        RuntimeError: If hisat2 binary not found within the path.
-    """
+    def __init__(self, *, hisat2_idx, n_cpu=4, output_dir='result_hisat2'):
         self.hisat2_idx = hisat2_idx
-
-        for reads_path in self.reads:
-            if not glob.glob(reads_path + '_*'):
-                logging.error('Could not find hisat2 reads %s', reads_path)
-                raise ValueError(f'Could not find hisat2 reads {reads_path}')
         self.n_cpu = n_cpu
-        self.output_dir = output_dir
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def run(self, R1_path, R2_path,) -> List[Mapping[str, Any]]:
-        """hisat2 maping"""
-        sample_name = R1_path.strip().split("/")[-1].split(".")[-2]
-        samfile_path = self.output_dir.rstrip("/")+"/"+f"{sample_name}.sam"
+    def run(self, R1_path, R2_path, sample_name=None):
+        name = sample_name or Path(R1_path).name.split('.')[0]
+        sam = self.output_dir / f'{name}.sam'
+        result = run_tool(['hisat2', '-p', self.n_cpu, '-x', self.hisat2_idx,
+                           '-1', R1_path, '-2', R2_path, '-S', sam], output=sam)
+        result[0]['samfile_path'] = str(sam)
+        return result
 
-        cmd = [
-            "hisat2",
-            '-p', str(self.n_cpu),
-            '-x', self.hisat2_idx,
-            '-1', R1_path,
-            '-2', R2_path,
-            '-S', samfile_path]
+    def sorted_bam(self, r1, r2, sample_name):
+        sam = Path(self.run(r1, r2, sample_name)[0]['samfile_path'])
+        bam = sam.with_suffix('.bam')
+        run_tool(['samtools', 'sort', '-@', self.n_cpu, '-o', bam, sam], output=bam)
+        sam.unlink()
+        return bam
 
-        logging.info('Launching subprocess "%s"', ' '.join(cmd))
-        process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        with utils.timing('hisat2'):
-            stdout, stderr = process.communicate()
-            retcode = process.wait()
-
-        if retcode:
-            # Logs have a 15k character limit, so log hisat2 error line by line.
-            logging.error('hisat2 failed. hisat2 stderr begin:')
-            for error_line in stderr.decode('utf-8').splitlines():
-                if error_line.strip():
-                    logging.error(error_line.strip())
-            logging.error('hisat2 stderr end')
-            raise RuntimeError('hisat2 failed\nstdout:\n%s\n\nstderr:\n%s\n' % (
-                stdout.decode('utf-8'), stderr[:500_000].decode('utf-8')))
-
-        raw_output = dict(
-            output=stdout,
-            stderr=stderr,
-            samfile_path=samfile_path
-        )
-        return [raw_output]
+def count_expression(annotation, bams, output_dir, n_cpu):
+    """Reproduce the historical gene read counts and transcript fragment counts on Subread >=2.0.2."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for attribute, filename in [('gene_id', 'geneCounts.tsv'), ('transcript_id', 'transcriptCounts.tsv')]:
+        output = output_dir / filename
+        pair_flags = ['--countReadPairs'] if attribute == 'transcript_id' else []
+        run_tool(['featureCounts', '-T', n_cpu, '-p', *pair_flags, '-t', 'exon',
+                  '-g', attribute, '-a', annotation, '-o', output, *bams], output=output)

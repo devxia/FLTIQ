@@ -10,84 +10,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Library to run SQANTI from Python."""
+"""Classify FLAIR isoforms with SQANTI3 5.2."""
 
-import glob
 import os
-import subprocess
-from typing import Any, List, Mapping, Optional, Sequence
+from pathlib import Path
+import shutil
+import sys
 
-from absl import logging
-
-from FLTIQ import utils
+from FLTIQ.utils import run_tool
 
 
 class SQANTI:
-    """Python wrapper of the SQANTI binary."""
-
-    def __init__(self,
-                 *,
-                 sqanti_dir: str,
-                 isoforms: str,
-                 annotation: str,
-                 reference: str,
-                 n_cpu: int = 4,
-                 output_dir: str = "result_SQANTI"):
-        """Initializes the Python SQANTI wrapper.
-
-    Args:
-        sqanti_dir: The path to the SQANTI directory.
-        isoforms: Isoforms (FASTA/FASTQ) or GTF format.
-        reference: Reference genome (Fasta format).
-        annotation: GTF annotation file.
-        n_cpu: The number of CPUs to give SQANTI.
-
-    Raises:
-        RuntimeError: If SQANTI binary not found within the path.
-    """
-        self.sqanti_dir = sqanti_dir
+    def __init__(self, *, sqanti_dir, isoforms, annotation, reference, n_cpu=4,
+                 output_dir='result_SQANTI', proj_name='flair', python=sys.executable):
+        self.script = Path(sqanti_dir) / 'sqanti3_qc.py'
+        self.python = shutil.which(str(python)) or str(python)
         self.isoforms = isoforms
         self.annotation = annotation
         self.reference = reference
-
-        for reads_path in self.reads:
-            if not glob.glob(reads_path + '_*'):
-                logging.error('Could not find SQANTI reads %s', reads_path)
-                raise ValueError(f'Could not find SQANTI reads {reads_path}')
         self.n_cpu = n_cpu
-        self.output_dir = output_dir
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.name = proj_name
+        self.classification = self.output_dir / f'{proj_name}_classification.txt'
+        self.corrected_gtf = self.output_dir / f'{proj_name}_corrected.gtf'
 
-    def qc(self, ) -> List[Mapping[str, Any]]:
-        """SQANTI Quality Control"""
-
-        cmd = [
-            "python",
-            self.sqanti_dir.rstrip("/")+"/sqanti3_qc.py",
-            '-t', str(self.n_cpu),
-            '-d', "self.output_dir",
-            self.isoforms,
-            self.annotation,
-            self.reference]
-
-        logging.info('Launching subprocess "%s"', ' '.join(cmd))
-        process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        with utils.timing('SQANTI'):
-            stdout, stderr = process.communicate()
-            retcode = process.wait()
-
-        if retcode:
-            # Logs have a 15k character limit, so log SQANTI error line by line.
-            logging.error('SQANTI failed. SQANTI stderr begin:')
-            for error_line in stderr.decode('utf-8').splitlines():
-                if error_line.strip():
-                    logging.error(error_line.strip())
-            logging.error('SQANTI stderr end')
-            raise RuntimeError('SQANTI failed\nstdout:\n%s\n\nstderr:\n%s\n' % (
-                stdout.decode('utf-8'), stderr[:500_000].decode('utf-8')))
-
-        raw_output = dict(
-            output=stdout,
-            stderr=stderr)
-        return [raw_output]
+    def qc(self):
+        env = os.environ.copy()
+        env['PATH'] = str(Path(self.python).absolute().parent) + os.pathsep + env['PATH']
+        result = run_tool([self.python, self.script, self.isoforms, self.annotation, self.reference,
+                           '-t', self.n_cpu, '-d', self.output_dir, '-o', self.name,
+                           '--force_id_ignore'], output=self.classification, env=env)
+        if not self.corrected_gtf.is_file() or not self.corrected_gtf.stat().st_size:
+            raise RuntimeError(f'SQANTI3 produced no corrected annotation at {self.corrected_gtf}')
+        return result

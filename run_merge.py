@@ -10,29 +10,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl import app
-from absl import flags
-from absl import logging
+"""Merge SQANTI3 corrected isoforms with a reference GTF."""
 
-from FLTIQ.merge import Cleaner
+import argparse
+import logging
 
-FLAGS = flags.FLAGS
-flags.DEFINE_string('sqanti_classification', "./",'Path to the SQANTI classification')
-flags.DEFINE_string('sqanti_gtf', "./", 'Path to the SQANTI output GTF annotation')
-flags.DEFINE_string('known_annotation', "./", 'GTF annotation file from database')
-flags.DEFINE_string('output_dir', "./", 'Path to the output directory')
+from FLTIQ.merge import merge_annotations
 
-def main(argv):
-    if len(argv) > 1:
-        raise app.UsageError('Too many command-line arguments.')
-    Cleaner_wrapper = Cleaner(FLAGS.sqanti_classification, FLAGS.sqanti_gtf, FLAGS.known_annotation, FLAGS.output_dir)
-    logging.set_verbosity(logging.INFO)
-    Cleaner_wrapper.del_FSM()
-    Cleaner_wrapper.merge()
-    Cleaner_wrapper.convert()
-    Cleaner_wrapper.rm()
-    Cleaner_wrapper.clean()
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('-i', '--sqanti_classification', required=True)
+    parser.add_argument('-g', '--sqanti_gtf', required=True)
+    parser.add_argument('-a', '--known_annotation', required=True)
+    parser.add_argument('-d', '--output_dir', required=True)
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    print(merge_annotations(args.sqanti_classification, args.sqanti_gtf, args.known_annotation, args.output_dir))
 
 
 if __name__ == '__main__':
-    app.run(main)
+    main()
